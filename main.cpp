@@ -1,6 +1,7 @@
 #include "raylib.h"
 
 #include <cstdio>
+#include <iterator>
 #include <list>
 
 enum Direction { Up, Right, Down, Left };
@@ -15,18 +16,12 @@ struct Snake {
 };
 
 const int ticksPerSecond = 4;
+const float tickTime = 1.0 / ticksPerSecond;
 const int screenWidth = 400;
 const int screenHeight = 400;
 const int blockSize = 20;
-double lastUpdate = GetTime();
-Direction requestDirection = Up;
-
-void DrawSnake(const Snake &snake) {
-  for (const Segment &segment : snake.segments) {
-    DrawRectangle(segment.position.x, segment.position.y, blockSize, blockSize,
-                  GREEN);
-  }
-}
+double timeSinceLastTick = 0;
+Direction desiredDirection = Up;
 
 Snake CreateSnake(int length) {
   Snake snake;
@@ -45,7 +40,16 @@ Snake CreateSnake(int length) {
   return snake;
 }
 
-Vector2 GetDirection(Direction &direction) {
+Snake snake = CreateSnake(3);
+
+void DrawSnake() {
+  for (const Segment &segment : snake.segments) {
+    DrawRectangle(segment.position.x, segment.position.y, blockSize, blockSize,
+                  GREEN);
+  }
+}
+
+Vector2 GetDirection(const Direction &direction) {
   switch (direction) {
   case Up:
     return {0, -1};
@@ -58,14 +62,24 @@ Vector2 GetDirection(Direction &direction) {
   }
 }
 
-void UpdateSnake(Snake &snake, Direction requestDirection) {
-  snake.direction = requestDirection;
+bool isSameAxis(const Direction &direction, const Direction &otherDirection) {
+  return ((direction == Up || direction == Down) &&
+          (otherDirection == Up || otherDirection == Down)) ||
+         ((direction == Left || direction == Right) &&
+          (otherDirection == Left || otherDirection == Right));
+}
+
+Snake UpdateSnake(const Snake &snake, Direction desiredDirection) {
+  Snake newSnake;
+  Direction decidedDirection = isSameAxis(snake.direction, desiredDirection)
+                                   ? snake.direction
+                                   : desiredDirection;
+
+  const Vector2 direction = GetDirection(decidedDirection);
+  newSnake.direction = decidedDirection;
+
   std::list<Segment>::const_iterator iterator = snake.segments.cbegin();
   const Segment head = *iterator;
-
-  snake.segments.pop_back();
-
-  const Vector2 direction = GetDirection(snake.direction);
 
   const Vector2 delta = {blockSize * direction.x, blockSize * direction.y};
 
@@ -85,62 +99,58 @@ void UpdateSnake(Snake &snake, Direction requestDirection) {
     newPosition.y = 0;
   }
 
-  Segment segment;
-  segment.position = newPosition;
+  Segment newHead;
+  newHead.position = newPosition;
 
-  snake.segments.push_front(segment);
+  newSnake.segments = snake.segments;
+  newSnake.segments.push_front(newHead);
+  newSnake.segments.pop_back();
+
+  return newSnake;
 }
 
-void Update(Snake &snake, Direction requestDirection) {
-  const double now = GetTime();
-  if ((now - lastUpdate) > 1.0 / ticksPerSecond) {
-    printf("Updating because %f has passed\n", now - lastUpdate);
+void Update() {
+  timeSinceLastTick += GetFrameTime();
 
-    UpdateSnake(snake, requestDirection);
-
-    lastUpdate = now;
+  if (timeSinceLastTick >= tickTime) {
+    snake = UpdateSnake(snake, desiredDirection);
+    timeSinceLastTick -= tickTime;
   }
 }
 
 void HandleInput(void) {
-  if (IsKeyPressed(KEY_UP) && requestDirection != Up &&
-      requestDirection != Down) {
-    requestDirection = Up;
-  } else if (IsKeyPressed(KEY_DOWN) && requestDirection != Up &&
-             requestDirection != Down) {
-    requestDirection = Down;
-  } else if (IsKeyPressed(KEY_RIGHT) && requestDirection != Left &&
-             requestDirection != Right) {
-    requestDirection = Right;
-  } else if (IsKeyPressed(KEY_LEFT) && requestDirection != Left &&
-             requestDirection != Right) {
-    requestDirection = Left;
+  if (IsKeyPressed(KEY_UP)) {
+    desiredDirection = Up;
+  } else if (IsKeyPressed(KEY_DOWN)) {
+    desiredDirection = Down;
+  } else if (IsKeyPressed(KEY_RIGHT)) {
+    desiredDirection = Right;
+  } else if (IsKeyPressed(KEY_LEFT)) {
+    desiredDirection = Left;
   }
 }
 
-void Draw(const Snake &snake) {
+void Draw() {
   BeginDrawing();
 
   ClearBackground(LIGHTGRAY);
 
-  DrawSnake(snake);
+  DrawSnake();
 
   EndDrawing();
 }
 
 int main(void) {
-  InitWindow(screenWidth, screenHeight, "basic window");
+  InitWindow(screenWidth, screenHeight, "Snek");
 
   SetTargetFPS(60);
-
-  Snake snake = CreateSnake(3);
 
   while (!WindowShouldClose()) {
     HandleInput();
 
-    Update(snake, requestDirection);
+    Update();
 
-    Draw(snake);
+    Draw();
   }
 
   CloseWindow();
