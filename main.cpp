@@ -1,47 +1,52 @@
 #include "raylib.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <cstdlib>
-#include <list>
+#include <ctime>
+#include <deque>
 
 enum Direction { Up, Right, Down, Left };
 
+struct GridPoint {
+  int x, y;
+};
+
 struct Segment {
-  Vector2 position;
+  GridPoint position;
 };
 
 struct Snake {
   Direction direction;
-  std::list<Segment> segments;
+  std::deque<Segment> segments;
 };
 
 const int TICKS_PER_SECOND = 4;
 const float TICK_TIME = 1.0 / TICKS_PER_SECOND;
 const int SCREEN_WIDTH = 400;
 const int SCREEN_HEIGHT = 400;
-const int BLOCK_SIZE = 20;
-const int BLOCKS_IN_WIDTH = SCREEN_WIDTH / BLOCK_SIZE;
-const int BLOCKS_IN_HEIGHT = SCREEN_HEIGHT / BLOCK_SIZE;
+const int TILE_SIZE = 20;
+const int TILES_IN_WIDTH = SCREEN_WIDTH / TILE_SIZE;
+const int TILES_IN_HEIGHT = SCREEN_HEIGHT / TILE_SIZE;
 
 struct GameState {
   double timeSinceLastTick = 0;
   Direction desiredDirection = Up;
   Snake snake;
-  Vector2 applePosition;
+  GridPoint applePosition;
+  bool gameOver;
 };
 
 Snake CreateSnake(int length) {
   Snake snake;
   snake.direction = Up;
-  snake.segments = std::list<Segment>();
+  snake.segments = std::deque<Segment>();
 
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < length; i++) {
     Segment segment;
-    const int offset = i * BLOCK_SIZE;
-    const int x = SCREEN_WIDTH / 2.0;
-    const int y = (SCREEN_HEIGHT / 2.0) + offset;
-    segment.position = {x, static_cast<float>(y)};
+    const int x = TILES_IN_WIDTH / 2;
+    const int y = (TILES_IN_HEIGHT / 2) + i;
+    segment.position.x = x;
+    segment.position.y = y;
     snake.segments.push_back(segment);
   }
 
@@ -50,18 +55,19 @@ Snake CreateSnake(int length) {
 
 void DrawSnake(const Snake &snake) {
   for (const Segment &segment : snake.segments) {
-    DrawRectangle(segment.position.x, segment.position.y, BLOCK_SIZE,
-                  BLOCK_SIZE, GREEN);
+    DrawRectangle(segment.position.x * TILE_SIZE,
+                  segment.position.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, GREEN);
   }
 }
 
-void DrawApple(const Vector2 &position) {
-  DrawRectangle(position.x, position.y, BLOCK_SIZE, BLOCK_SIZE, RED);
+void DrawApple(const GridPoint &position) {
+  DrawRectangle(position.x * TILE_SIZE, position.y * TILE_SIZE, TILE_SIZE,
+                TILE_SIZE, RED);
 }
 
-Vector2 GetApplePosition(GameState &state) {
-  int x = std::rand() % BLOCKS_IN_WIDTH;
-  int y = std::rand() % BLOCKS_IN_HEIGHT;
+GridPoint GetApplePosition(GameState &state) {
+  int x = std::rand() % TILES_IN_WIDTH;
+  int y = std::rand() % TILES_IN_HEIGHT;
 
   while (true) {
     if (!std::any_of(state.snake.segments.begin(), state.snake.segments.end(),
@@ -71,16 +77,17 @@ Vector2 GetApplePosition(GameState &state) {
       break;
     }
 
-    x = std::rand() % BLOCKS_IN_WIDTH;
-    y = std::rand() % BLOCKS_IN_HEIGHT;
+    x = std::rand() % TILES_IN_WIDTH;
+    y = std::rand() % TILES_IN_HEIGHT;
   }
 
-  printf("GetApplePosition %d, %d", x, y);
-  return Vector2{static_cast<float>(x * BLOCK_SIZE),
-                 static_cast<float>(y * BLOCK_SIZE)};
+  GridPoint point;
+  point.x = x;
+  point.y = y;
+  return point;
 }
 
-Vector2 GetDirection(const Direction &direction) {
+GridPoint GetDirection(const Direction &direction) {
   switch (direction) {
   case Up:
     return {0, -1};
@@ -109,41 +116,47 @@ Snake UpdateSnake(GameState &state) {
           ? state.snake.direction
           : state.desiredDirection;
 
-  const Vector2 direction = GetDirection(decidedDirection);
+  const GridPoint direction = GetDirection(decidedDirection);
   newSnake.direction = decidedDirection;
 
-  std::list<Segment>::const_iterator iterator = state.snake.segments.cbegin();
+  std::deque<Segment>::const_iterator iterator = state.snake.segments.cbegin();
   const Segment head = *iterator;
 
-  const Vector2 delta = {BLOCK_SIZE * direction.x, BLOCK_SIZE * direction.y};
-
-  Vector2 newPosition = {head.position.x + delta.x, head.position.y + delta.y};
+  GridPoint newPosition = {head.position.x + direction.x,
+                           head.position.y + direction.y};
 
   // Screen wrapping x
   if (newPosition.x < 0) {
-    newPosition.x = SCREEN_WIDTH - BLOCK_SIZE;
-  } else if (newPosition.x >= SCREEN_WIDTH) {
+    newPosition.x = TILES_IN_WIDTH - 1;
+  } else if (newPosition.x >= TILES_IN_WIDTH) {
     newPosition.x = 0;
   }
 
   // Screen wrapping y
   if (newPosition.y < 0) {
-    newPosition.y = SCREEN_HEIGHT - BLOCK_SIZE;
-  } else if (newPosition.y >= SCREEN_HEIGHT) {
+    newPosition.y = TILES_IN_HEIGHT - 1;
+  } else if (newPosition.y >= TILES_IN_HEIGHT) {
     newPosition.y = 0;
   }
 
+  for (int i = 0; i < state.snake.segments.size(); i++) {
+    const Segment s = state.snake.segments[i];
+
+    if (s.position.x == newPosition.x && s.position.y == newPosition.y) {
+      state.gameOver = true;
+      break;
+    }
+  }
+
   Segment newHead;
-  newHead.position = newPosition;
+  newHead.position.x = newPosition.x;
+  newHead.position.y = newPosition.y;
 
   newSnake.segments = state.snake.segments;
   newSnake.segments.push_front(newHead);
 
-  if (std::any_of(newSnake.segments.begin(), newSnake.segments.end(),
-                  [&](const Segment &s) {
-                    return s.position.x == state.applePosition.x &&
-                           s.position.y == state.applePosition.y;
-                  })) {
+  if (newPosition.x == state.applePosition.x &&
+      newPosition.y == state.applePosition.y) {
     state.applePosition = GetApplePosition(state);
   } else {
     newSnake.segments.pop_back();
@@ -186,20 +199,21 @@ void Draw(const GameState &state) {
 }
 
 int main(void) {
+  std::srand(static_cast<unsigned>(time(nullptr)));
+
   GameState state;
   state.snake = CreateSnake(3);
   state.desiredDirection = Up;
   state.timeSinceLastTick = 0;
-  Vector2 initialApplePosition = GetApplePosition(state);
-  printf("Initial apple position: %f, %f", initialApplePosition.x,
-         initialApplePosition.y);
+  state.gameOver = false;
+  GridPoint initialApplePosition = GetApplePosition(state);
   state.applePosition = initialApplePosition;
 
   InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Snek");
 
   SetTargetFPS(60);
 
-  while (!WindowShouldClose()) {
+  while (!WindowShouldClose() && !state.gameOver) {
     HandleInput(state);
 
     Update(state);
