@@ -109,18 +109,16 @@ bool isSameAxis(const Direction &direction, const Direction &otherDirection) {
           (otherDirection == Left || otherDirection == Right));
 }
 
-Snake UpdateSnake(GameState &state) {
-  Snake newSnake;
+void UpdateSnake(GameState &state) {
   Direction decidedDirection =
       isSameAxis(state.snake.direction, state.desiredDirection)
           ? state.snake.direction
           : state.desiredDirection;
 
   const GridPoint direction = GetDirection(decidedDirection);
-  newSnake.direction = decidedDirection;
+  state.snake.direction = decidedDirection;
 
-  std::deque<Segment>::const_iterator iterator = state.snake.segments.cbegin();
-  const Segment head = *iterator;
+  const Segment &head = state.snake.segments.front();
 
   GridPoint newPosition = {head.position.x + direction.x,
                            head.position.y + direction.y};
@@ -139,37 +137,34 @@ Snake UpdateSnake(GameState &state) {
     newPosition.y = 0;
   }
 
-  for (int i = 0; i < state.snake.segments.size(); i++) {
-    const Segment s = state.snake.segments[i];
+  Segment newHead;
+  newHead.position.x = newPosition.x;
+  newHead.position.y = newPosition.y;
+
+  state.snake.segments.push_front(newHead);
+
+  if (newPosition.x == state.applePosition.x &&
+      newPosition.y == state.applePosition.y) {
+    state.applePosition = GetApplePosition(state);
+  } else {
+    state.snake.segments.pop_back();
+  }
+
+  for (int i = 1; i < state.snake.segments.size(); i++) {
+    const Segment &s = state.snake.segments[i];
 
     if (s.position.x == newPosition.x && s.position.y == newPosition.y) {
       state.gameOver = true;
       break;
     }
   }
-
-  Segment newHead;
-  newHead.position.x = newPosition.x;
-  newHead.position.y = newPosition.y;
-
-  newSnake.segments = state.snake.segments;
-  newSnake.segments.push_front(newHead);
-
-  if (newPosition.x == state.applePosition.x &&
-      newPosition.y == state.applePosition.y) {
-    state.applePosition = GetApplePosition(state);
-  } else {
-    newSnake.segments.pop_back();
-  }
-
-  return newSnake;
 }
 
 void Update(GameState &state) {
   state.timeSinceLastTick += GetFrameTime();
 
   if (state.timeSinceLastTick >= TICK_TIME) {
-    state.snake = UpdateSnake(state);
+    UpdateSnake(state);
 
     state.timeSinceLastTick -= TICK_TIME;
   }
