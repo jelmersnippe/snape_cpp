@@ -1,7 +1,6 @@
 #include "raylib.h"
 
 #include <algorithm>
-#include <cstdlib>
 #include <ctime>
 #include <deque>
 
@@ -194,6 +193,7 @@ void Draw(const GameState &state) {
 }
 
 int main(void) {
+  printf("");
   std::srand(static_cast<unsigned>(time(nullptr)));
 
   GameState state;

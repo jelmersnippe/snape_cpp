@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.11) # FetchContent is available in 3.11+
 project(snake_cpp)
 
 # Generate compile_commands.json
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGRAPHICS_API_OPENGL_33 -DPLATFORM_DESKTOP")
 
 # Dependencies
 set(RAYLIB_VERSION 6.0)
